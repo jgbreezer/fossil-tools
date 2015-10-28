@@ -3,11 +3,15 @@
 # $2=dest. dir
 # supports fossil mv options
 # moves single source tree as-is to under/new dest.dir (not reducing dir levels to flat structure under dest dir)
+# FIXME/CHECKME: create non-fossil controlled files in subdirs and see how that works - does it make whole fossil command for each dir die and fail to move? Are they left there while everything in fosssil moves ok (and should I have an option to ignore files by wildcard pattern if so)?
 exclude=''
+excinfo=''
+exclude=''
+fossilopts=''
 
 usage () {
     cat >&2 <<EOF
-Usage: fossilmvtree [-x|--exclude= exclude_dirname] source dest"
+Usage: fossilmvtree [fossil mv options] [-x|--exclude= exclude_dirname] source dest"
 -x option may be specified multiple times; do not specify full paths, just last
 (filename/aka basename) of a directory to exclude from the move.
 Command-line arguments are always included.
@@ -18,22 +22,22 @@ while [ -z "${1##-*}" ]
 do
     case "$1" in
     -x|--exclude|--exclude=*)
-        if [[ "${1#--exclude=}" == "$1" ]]
-        then
-            # separate arg, '--exclude=' not used
-            shift
-            arg="$1"
-        else
-            arg="${1#--exclude=}"
-        fi
-        excinfo="$excinfo $arg"
-        # pruning is efficient
-        exclude="$exclude -type d -name '${arg//\'/\\\'}' -prune -o"
-        ;;
+	if [[ "${1#--exclude=}" == "$1" ]]
+	then
+	    # separate arg, '--exclude=' not used
+	    shift
+	    arg="$1"
+	else
+	    arg="${1#--exclude=}"
+	fi
+	excinfo="$excinfo $arg"
+	# pruning is efficient
+	exclude="$exclude -type d -name '${arg//\'/\\\'}' -prune -o"
+	;;
     --case-sensitive)
-        fossilopts="$fossilopts $1 $2"; shift;;
+	fossilopts="$fossilopts $1 $2"; shift;;
     -*)
-        fossilopts="$fossilopts $1";;
+	fossilopts="$fossilopts $1";;
     esac
     shift
 done
@@ -52,16 +56,17 @@ then
     dst="$dst/$srcdir"
 fi
 #could set safe PATH (-execdir is cautious of relative/empty paths in $PATH but fossil binary might not be in std.location): PATH=/bin:/usr/bin:/usr/local/bin
+# Odd BUG where running same find command (as far as I can be sure to tell) in interpreter vs. script has different output - the $exclude is applied/not (although outputs same)
 eval find "$src" $exclude -type d -printf '%P\\n' | { 
     while read -r dir
     do
-        [ -z "$dir" ] || [[ "$src/$dir" == "$dst/$dir" ]] && continue
-        echo
+	[ -z "$dir" ] || [[ "$src/$dir" == "$dst/$dir" ]] && continue
+	echo
         echo "fossil mv $src/$dir/* $dst/$dir/"
-        mkdir -p "$dst/$dir" || exit 1
-        find "$src/$dir" -maxdepth 1 \! -type d -exec "$mv" $fossilopts "$dst/$dir" '{}' +
-        rmdir "$src/$dir" # tidy up, as we only moved the files above (fossil doesn't really manage dirs)
-        # if rmdir fails due to remaining files, let user manage that (rmdir will complain to stderr if so) -
-        # likely to be unversioned files they might have forgotten about, shouldn't delete without user's knowledge.
+	mkdir -p "$dst/$dir" || exit 1
+	find "$src/$dir" -maxdepth 1 \! -type d -exec "$mv" $fossilopts "$dst/$dir" '{}' +
+	rmdir "$src/$dir" # tidy, as only files moved yet (fossil doesn't manage dirs)
+	# if rmdir fails (eg. remaining files), user manages that (complains to stderr nicely) -
+	# likely to be unversioned files they forgot about, shouldn't delete without user's knowledge.
     done
 }

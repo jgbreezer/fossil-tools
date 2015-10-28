@@ -1,0 +1,13 @@
+#!/bin/sh
+# switch order of move arguments around to work with find -exec ... +
+opts=''
+while [ -z "${1##-*}" ]
+do
+    case "$1" in
+    --case-sensitive) opts="$opts $1 $2"; shift 2;;
+    *) opts="$opts $1"; shift;;
+    esac
+done
+destdir="$1"
+shift
+fossil mv $opts "$@" $destdir
